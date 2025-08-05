@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public class Playercontrols : MonoBehaviour
@@ -14,7 +15,7 @@ public class Playercontrols : MonoBehaviour
     public Rigidbody rb;
     public CapsuleCollider playerCollider; // CapsuleCollider attached to the player
     public Animator animator; // Animator for playing animations (attach your Animator component here)
-
+    public RuntimeAnimatorController animatorController; // NEW: Public field to assign Animator Controller
     private float currentLanePosition = 0;
     private float swipeLerpTime;
 
@@ -26,9 +27,33 @@ public class Playercontrols : MonoBehaviour
     {
         rb = GetComponent<Rigidbody>();
         playerCollider = GetComponent<CapsuleCollider>();
-        animator = GetComponent<Animator>(); // Ensure the Animator component is attached to your character
 
-        // Save original collider values for resetting after slide
+        // Assign Animator programmatically, or validate runtime controller
+        if (animator == null)
+        {
+            animator = GetComponent<Animator>();
+            if (animator == null)
+            {
+                Debug.LogError("Animator component is missing! It must be assigned or added to this game object.");
+                return;
+            }
+        }
+
+        // NEW: Assign Animator Controller if not already assigned
+        if (animator.runtimeAnimatorController == null)
+        {
+            if (animatorController != null)
+            {
+                animator.runtimeAnimatorController = animatorController;
+                Debug.Log($"Assigned Animator Controller: {animatorController.name}");
+            }
+            else
+            {
+                Debug.LogError("Animator Controller (e.g., JamesController) is not assigned to the Animator. Please assign one in the Inspector.");
+            }
+        }
+
+        // Save original collider info for sliding logic
         originalColliderHeight = playerCollider.height;
         originalColliderCenter = playerCollider.center;
     }
@@ -48,10 +73,63 @@ public class Playercontrols : MonoBehaviour
         // Slide input (press Down Arrow for testing)
         if (Input.GetKeyDown(KeyCode.DownArrow) && !isSliding)
         {
+            animator.ResetTrigger("Slide"); // Reset old trigger
+            animator.SetTrigger("Slide");   // Fire slide trigger
             StartCoroutine(Slide());
         }
     }
 
+    private System.Collections.IEnumerator Slide()
+    {
+        if (isSliding) yield break; // Prevent duplicate slides
+        isSliding = true;
+
+        if (animator != null) // Ensure Animator is assigned
+        {
+            Debug.Log($"Animator found. Active Controller: {(animator.runtimeAnimatorController != null ? animator.runtimeAnimatorController.name : "None")}");
+
+            // Trigger the Slide animation
+            animator.SetTrigger("Slide");
+            Debug.Log("Slide trigger set.");
+
+            // Wait for 1 frame to allow Animator to update
+            yield return null;
+
+            // Verify animation state
+            AnimatorStateInfo stateInfo = animator.GetCurrentAnimatorStateInfo(0);
+            if (stateInfo.IsName("Slide"))
+            {
+                Debug.Log("Slide animation is now playing!");
+            }
+            else
+            {
+                Debug.LogError("Failed to transition to Slide state. Check Animator transitions and parameters.");
+            }
+        }
+        else
+        {
+            Debug.LogError("Animator is null or not assigned.");
+            isSliding = false;
+            yield break;
+        }
+
+        // Adjust CapsuleCollider for sliding
+        float reducedHeight = originalColliderHeight / 2f;
+        float centerAdjustment = (originalColliderHeight - reducedHeight) / 2f;
+
+        playerCollider.height = reducedHeight;
+        playerCollider.center = new Vector3(originalColliderCenter.x, originalColliderCenter.y - centerAdjustment, originalColliderCenter.z);
+
+        // Wait for the slide duration
+        yield return new WaitForSeconds(slideDuration);
+
+        // Reset CapsuleCollider to its original state
+        playerCollider.height = originalColliderHeight;
+        playerCollider.center = originalColliderCenter;
+
+        Debug.Log("Slide animation completed.");
+        isSliding = false;
+    }
     private void FixedUpdate()
     {
         // Forward constant movement
@@ -77,29 +155,5 @@ public class Playercontrols : MonoBehaviour
         swipeLerpTime = 0;
     }
 
-    private System.Collections.IEnumerator Slide()
-    {
-        // Start sliding
-        isSliding = true;
-
-        // Trigger the slide animation
-        if (animator != null)
-        {
-            animator.SetTrigger("Slide"); // Ensure "Slide" is the trigger name in your Animator Controller
-        }
-
-        // Reduce the collider height and lower the character
-        playerCollider.height = originalColliderHeight / 2f; // Reduce height by half
-        playerCollider.center = originalColliderCenter - new Vector3(0, originalColliderHeight / 4f, 0); // Lower collider center
-
-        // Wait for slide duration
-        yield return new WaitForSeconds(slideDuration);
-
-        // Reset the collider to its original state
-        playerCollider.height = originalColliderHeight;
-        playerCollider.center = originalColliderCenter;
-
-        // End sliding
-        isSliding = false;
-    }
+  
 }

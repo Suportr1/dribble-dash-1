@@ -279,6 +279,7 @@ MonoBehaviour:
   rb: {fileID: 199734361}
   playerCollider: {fileID: 199734362}
   animator: {fileID: 5866666021909216657, guid: 50e4a3d5f10424045bcc64008151d8ef, type: 3}
+  animatorController: {fileID: 9100000, guid: 123392137cd875244b7ea3d8f6a947a1, type: 2}
 --- !u!1 &705507993
 GameObject:
   m_ObjectHideFlags: 0
@@ -621,8 +622,19 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 9100000, guid: 123392137cd875244b7ea3d8f6a947a1, type: 2}
     - target: {fileID: 5866666021909216657, guid: 50e4a3d5f10424045bcc64008151d8ef, type: 3}
+      propertyPath: m_WarningMessage
+      value: "\nBinding warning: Some generic clip(s) animate transforms that are
+        already bound by a Humanoid avatar. These transforms can only be changed
+        by Humanoid clips.\n\tTransform 'mixamorig9:Hips'\n\tTransform 'mixamorig9:LeftHandRing3'\n\tTransform
+        'mixamorig9:RightHandRing1'\n\tTransform 'mixamorig9:LeftHandPinky3'\n\tTransform
+        'mixamorig9:LeftHandIndex2'\n\tTransform 'mixamorig9:RightHandThumb2'\n\tTransform
+        'mixamorig9:LeftForeArm'\n\tTransform 'mixamorig9:LeftFoot'\n\tTransform
+        'mixamorig9:RightHandThumb3'\n\tTransform 'mixamorig9:RightHandPinky1'\n\tand
+        more ...\n\tFrom animation clip 'mixamo.com'"
+      objectReference: {fileID: 0}
+    - target: {fileID: 5866666021909216657, guid: 50e4a3d5f10424045bcc64008151d8ef, type: 3}
       propertyPath: m_ApplyRootMotion
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

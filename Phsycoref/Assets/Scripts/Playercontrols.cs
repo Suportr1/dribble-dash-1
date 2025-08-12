@@ -25,10 +25,34 @@ public class Playercontrols : MonoBehaviour
 
     void Start()
     {
+        // Get essential components
         rb = GetComponent<Rigidbody>();
         playerCollider = GetComponent<CapsuleCollider>();
 
-        // Assign Animator programmatically, or validate runtime controller
+        if (rb == null)
+        {
+            Debug.LogError("Rigidbody component is missing! Please add it to this game object.");
+            return;
+        }
+
+        if (playerCollider == null)
+        {
+            Debug.LogError("CapsuleCollider component is missing! Please add it to this game object.");
+            return;
+        }
+
+        // Align CapsuleCollider for grounding
+        float bottomColliderOffset = playerCollider.height / 2f - playerCollider.radius;
+        playerCollider.center = new Vector3(playerCollider.center.x, bottomColliderOffset, playerCollider.center.z);
+
+        // Debugging logs for Collider
+        Debug.Log($"Adjusted CapsuleCollider Center: {playerCollider.center}, Height: {playerCollider.height}");
+
+        // Configure Rigidbody constraints
+        rb.constraints = RigidbodyConstraints.FreezeRotation; // Freeze rotation to avoid tipping
+        rb.useGravity = true; // Ensure gravity is enabled
+
+        // Ensure Animator is assigned
         if (animator == null)
         {
             animator = GetComponent<Animator>();
@@ -39,7 +63,7 @@ public class Playercontrols : MonoBehaviour
             }
         }
 
-        // NEW: Assign Animator Controller if not already assigned
+        // Assign Animator Controller if not already assigned
         if (animator.runtimeAnimatorController == null)
         {
             if (animatorController != null)
@@ -49,13 +73,21 @@ public class Playercontrols : MonoBehaviour
             }
             else
             {
-                Debug.LogError("Animator Controller (e.g., JamesController) is not assigned to the Animator. Please assign one in the Inspector.");
+                Debug.LogError("Animator Controller is not assigned to the Animator. Please assign one in the Inspector.");
             }
         }
 
-        // Save original collider info for sliding logic
+        // Save original Collider info for sliding logic
         originalColliderHeight = playerCollider.height;
         originalColliderCenter = playerCollider.center;
+
+        Debug.Log("Initialization complete. Rigidbody, CapsuleCollider, and Animator have been set up.");
+    }
+    private bool IsGrounded()
+    {
+        // Check if the player is grounded using a raycast
+        float groundCheckDistance = 0.1f; // Small distance to check
+        return Physics.Raycast(transform.position, Vector3.down, groundCheckDistance + playerCollider.radius);
     }
 
     void Update()
@@ -132,17 +164,30 @@ public class Playercontrols : MonoBehaviour
     }
     private void FixedUpdate()
     {
+        if (!IsGrounded())
+        {
+            Debug.LogWarning("The player is not grounded!");
+        }
+
         // Forward constant movement
-        Vector3 forwardMovement = transform.forward * speed * Time.fixedDeltaTime;
+        Vector3 forwardMovement = transform.forward * speed;
 
         // Smooth interpolation for lateral movement
         float lanePositionX = targetLane * laneDistance;
         swipeLerpTime += Time.fixedDeltaTime / swipeDuration;
         currentLanePosition = Mathf.Lerp(currentLanePosition, lanePositionX, swipeLerpTime);
 
-        // Apply calculated movement
-        Vector3 targetPosition = new Vector3(currentLanePosition, rb.position.y, rb.position.z) + forwardMovement;
-        rb.MovePosition(targetPosition);
+        // Compute velocity
+        Vector3 velocity = new Vector3(
+            (currentLanePosition - rb.position.x) / Time.fixedDeltaTime, // Lateral movement
+            rb.velocity.y,                                              // Keep Y velocity (gravity)
+            forwardMovement.z                                           // Forward movement
+        );
+
+        // Apply velocity
+        rb.velocity = velocity;
+
+        Debug.Log($"Position: {rb.position}, Velocity: {rb.velocity}");
     }
 
     private void ChangeLane(int direction)

@@ -73,7 +73,8 @@ public class Playercontrols : MonoBehaviour
         // Slide input (press Down Arrow for testing)
         if (Input.GetKeyDown(KeyCode.DownArrow) && !isSliding)
         {
-            animator.SetTrigger("Slide");   // Correctly fires slide trigger
+            animator.ResetTrigger("Slide"); // Reset old trigger
+            animator.SetTrigger("Slide");   // Fire slide trigger
             StartCoroutine(Slide());
         }
     }
@@ -83,64 +84,50 @@ public class Playercontrols : MonoBehaviour
         if (isSliding) yield break; // Prevent duplicate slides
         isSliding = true;
 
-        if (animator != null)
+        if (animator != null) // Ensure Animator is assigned
         {
-            Debug.Log($"Animator Controller: {(animator.runtimeAnimatorController != null ? animator.runtimeAnimatorController.name : "None")}");
+            Debug.Log($"Animator found. Active Controller: {(animator.runtimeAnimatorController != null ? animator.runtimeAnimatorController.name : "None")}");
 
-            // Check if the Animator already has the Slide trigger
-            foreach (var param in animator.parameters)
-            {
-                Debug.Log($"Animator Parameter Found: Name = {param.name}, Type = {param.type}");
-            }
-
-            // Reset all triggers before setting Slide
-            foreach (var param in animator.parameters)
-            {
-                if (param.type == AnimatorControllerParameterType.Trigger)
-                    animator.ResetTrigger(param.name);
-            }
-
-            // Set Slide Trigger
+            // Trigger the Slide animation
             animator.SetTrigger("Slide");
             Debug.Log("Slide trigger set.");
 
-            // Allow Animator one frame to process
+            // Wait for 1 frame to allow Animator to update
             yield return null;
 
-            // Log current and next Animator state for debugging
-            AnimatorStateInfo stateInfo = animator.GetCurrentAnimatorStateInfo(0); // Layer 0 by default
-            Debug.Log($"Current Animator State: {stateInfo.fullPathHash}");
-
-            // Verify if we transitioned to Slide state
+            // Verify animation state
+            AnimatorStateInfo stateInfo = animator.GetCurrentAnimatorStateInfo(0);
             if (stateInfo.IsName("Slide"))
             {
-                Debug.Log("Successfully transitioned to Slide state.");
+                Debug.Log("Slide animation is now playing!");
             }
             else
             {
-                Debug.LogError("Failed to transition to Slide state. Verify transitions.");
+                Debug.LogError("Failed to transition to Slide state. Check Animator transitions and parameters.");
             }
         }
         else
         {
-            Debug.LogError("Animator is null or missing.");
+            Debug.LogError("Animator is null or not assigned.");
             isSliding = false;
             yield break;
         }
 
-        // OPTIONAL: Adjust CapsuleCollider height & center for sliding
-        playerCollider.height = originalColliderHeight / 2f;
-        playerCollider.center = new Vector3(originalColliderCenter.x,
-                                            originalColliderCenter.y - (originalColliderHeight / 4f),
-                                            originalColliderCenter.z);
+        // Adjust CapsuleCollider for sliding
+        float reducedHeight = originalColliderHeight / 2f;
+        float centerAdjustment = (originalColliderHeight - reducedHeight) / 2f;
 
+        playerCollider.height = reducedHeight;
+        playerCollider.center = new Vector3(originalColliderCenter.x, originalColliderCenter.y - centerAdjustment, originalColliderCenter.z);
+
+        // Wait for the slide duration
         yield return new WaitForSeconds(slideDuration);
 
-        // Reset CapsuleCollider
+        // Reset CapsuleCollider to its original state
         playerCollider.height = originalColliderHeight;
         playerCollider.center = originalColliderCenter;
 
-        Debug.Log("Slide completed.");
+        Debug.Log("Slide animation completed.");
         isSliding = false;
     }
     private void FixedUpdate()

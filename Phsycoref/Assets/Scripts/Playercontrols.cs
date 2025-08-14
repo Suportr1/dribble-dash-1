@@ -11,14 +11,16 @@ public class Playercontrols : MonoBehaviour
     public float swipeDuration = 0.2f; // Duration for lane-switching
     public float slideDuration = 0.8f; // How long the slide lasts
     private int targetLane = 0; // Current target lane (-1, 0, 1 for left, center, right)
-
+    public float jumpForce = 10f; // How high the player can jump
+   
     public Rigidbody rb;
     public CapsuleCollider playerCollider; // CapsuleCollider attached to the player
     public Animator animator; // Animator for playing animations (attach your Animator component here)
     public RuntimeAnimatorController animatorController; // NEW: Public field to assign Animator Controller
     private float currentLanePosition = 0;
     private float swipeLerpTime;
-
+    private bool isJumping = false; // Track if currently jumping
+    private bool canJump = true; // Ensure a jump can only happen when allowed
     private bool isSliding = false; // Track if currently sliding
     private Vector3 originalColliderCenter;
     private float originalColliderHeight;
@@ -29,26 +31,28 @@ public class Playercontrols : MonoBehaviour
         rb = GetComponent<Rigidbody>();
         playerCollider = GetComponent<CapsuleCollider>();
 
+        // Check if Rigidbody exists
         if (rb == null)
         {
             Debug.LogError("Rigidbody component is missing! Please add it to this game object.");
             return;
         }
 
+        // Check if CapsuleCollider exists
         if (playerCollider == null)
         {
             Debug.LogError("CapsuleCollider component is missing! Please add it to this game object.");
             return;
         }
 
-        // Align CapsuleCollider for grounding
+        // Align CapsuleCollider for proper grounding
         float bottomColliderOffset = playerCollider.height / 2f - playerCollider.radius;
         playerCollider.center = new Vector3(playerCollider.center.x, bottomColliderOffset, playerCollider.center.z);
 
-        // Debugging logs for Collider
+        // Debugging logs for CapsuleCollider
         Debug.Log($"Adjusted CapsuleCollider Center: {playerCollider.center}, Height: {playerCollider.height}");
 
-        // Configure Rigidbody constraints
+        // Configure Rigidbody for stability
         rb.constraints = RigidbodyConstraints.FreezeRotation; // Freeze rotation to avoid tipping
         rb.useGravity = true; // Ensure gravity is enabled
 
@@ -77,6 +81,13 @@ public class Playercontrols : MonoBehaviour
             }
         }
 
+        // Disable root motion to prevent unexpected position or rotation changes
+        animator.applyRootMotion = false;
+        Debug.Log("Animator root motion has been disabled.");
+
+        // Ensure the player is facing forward at the start
+        transform.rotation = Quaternion.LookRotation(Vector3.forward);
+
         // Save original Collider info for sliding logic
         originalColliderHeight = playerCollider.height;
         originalColliderCenter = playerCollider.center;
@@ -85,9 +96,12 @@ public class Playercontrols : MonoBehaviour
     }
     private bool IsGrounded()
     {
-        // Check if the player is grounded using a raycast
-        float groundCheckDistance = 0.1f; // Small distance to check
-        return Physics.Raycast(transform.position, Vector3.down, groundCheckDistance + playerCollider.radius);
+        // Create a raycast slightly below the player to check for the ground
+        float groundCheckDistance = 0.1f; // Small allowance for checking
+        Ray ray = new Ray(transform.position, Vector3.down);
+
+        // Check if we hit a collider below the player
+        return Physics.Raycast(ray, groundCheckDistance + playerCollider.radius);
     }
 
     void Update()
@@ -109,95 +123,137 @@ public class Playercontrols : MonoBehaviour
             animator.SetTrigger("Slide");   // Fire slide trigger
             StartCoroutine(Slide());
         }
+        // Jump input
+        if (Input.GetKeyDown(KeyCode.UpArrow) && IsGrounded() && canJump && !isJumping)
+        {
+            Jump();
+        }
+    }
+    private void Jump()
+    {
+        if (isJumping) return; // Prevent multiple jumps
+        isJumping = true;
+        canJump = false; // Disable jumping until grounded
+
+        // Trigger jump animation
+        animator.ResetTrigger("Jump");
+        animator.SetTrigger("Jump");
+
+        // Apply upward force for the jump
+        rb.velocity = new Vector3(rb.velocity.x, jumpForce, rb.velocity.z);
+
+        // Start cooldown to reset jumping
+        StartCoroutine(JumpCooldown());
     }
 
+    private IEnumerator JumpCooldown()
+    {
+        // Wait for the player to return to the ground
+        while (!IsGrounded())
+        {
+            yield return null; // Wait until the next frame
+        }
+
+        yield return new WaitForSeconds(0.1f); // Small delay to ensure grounded
+
+        // Reset jumping status
+        isJumping = false;
+        canJump = true; // Allow jumping again
+        Debug.Log("Jump completed. Player is grounded.");
+    }
     private System.Collections.IEnumerator Slide()
     {
-        if (isSliding) yield break; // Prevent duplicate slides
+        if (isSliding) yield break; // Prevent sliding if already sliding
         isSliding = true;
 
-        if (animator != null) // Ensure Animator is assigned
-        {
-            Debug.Log($"Animator found. Active Controller: {(animator.runtimeAnimatorController != null ? animator.runtimeAnimatorController.name : "None")}");
+        // Trigger the Slide animation
+        animator.ResetTrigger("Slide");
+        animator.SetTrigger("Slide");
 
-            // Trigger the Slide animation
-            animator.SetTrigger("Slide");
-            Debug.Log("Slide trigger set.");
+        // Lock the horizontal (lane) position based on the current lane
+        float lockedXPosition = targetLane * laneDistance;
 
-            // Wait for 1 frame to allow Animator to update
-            yield return null;
-
-            // Verify animation state
-            AnimatorStateInfo stateInfo = animator.GetCurrentAnimatorStateInfo(0);
-            if (stateInfo.IsName("Slide"))
-            {
-                Debug.Log("Slide animation is now playing!");
-            }
-            else
-            {
-                Debug.LogError("Failed to transition to Slide state. Check Animator transitions and parameters.");
-            }
-        }
-        else
-        {
-            Debug.LogError("Animator is null or not assigned.");
-            isSliding = false;
-            yield break;
-        }
-
-        // Adjust CapsuleCollider for sliding
+        // Temporarily adjust the capsule collider for sliding
         float reducedHeight = originalColliderHeight / 2f;
         float centerAdjustment = (originalColliderHeight - reducedHeight) / 2f;
-
         playerCollider.height = reducedHeight;
         playerCollider.center = new Vector3(originalColliderCenter.x, originalColliderCenter.y - centerAdjustment, originalColliderCenter.z);
 
-        // Wait for the slide duration
-        yield return new WaitForSeconds(slideDuration);
+        // Calculate slide duration
+        float slideEndTime = Time.time + slideDuration;
 
-        // Reset CapsuleCollider to its original state
+        // Maintain proper forward motion and lane-lock throughout the slide
+        while (Time.time < slideEndTime)
+        {
+            // Ensure player locks to the current lane (horizontal X-axis)
+            rb.velocity = new Vector3(
+                (lockedXPosition - rb.position.x) / Time.deltaTime, // Lock lateral X movement
+                rb.velocity.y, // Retain vertical (gravity) velocity
+                speed           // Constant forward velocity
+            );
+
+            // Force the player to face forward
+            transform.rotation = Quaternion.LookRotation(Vector3.forward);
+
+            yield return null; // Wait until the next frame
+        }
+
+        // Restore the capsule collider's original dimensions
         playerCollider.height = originalColliderHeight;
         playerCollider.center = originalColliderCenter;
 
-        Debug.Log("Slide animation completed.");
+        Debug.Log("Slide completed!");
         isSliding = false;
     }
     private void FixedUpdate()
     {
+        // Check if the player is on the ground
         if (!IsGrounded())
         {
             Debug.LogWarning("The player is not grounded!");
         }
 
-        // Forward constant movement
-        Vector3 forwardMovement = transform.forward * speed;
+        // Compute the player's target X position based on the target lane
+        float targetXPosition = targetLane * laneDistance;
 
-        // Smooth interpolation for lateral movement
-        float lanePositionX = targetLane * laneDistance;
-        swipeLerpTime += Time.fixedDeltaTime / swipeDuration;
-        currentLanePosition = Mathf.Lerp(currentLanePosition, lanePositionX, swipeLerpTime);
+        // Smoothly move toward the target X position when not sliding
+        if (!isSliding)
+        {
+            swipeLerpTime += Time.fixedDeltaTime / swipeDuration;
+            currentLanePosition = Mathf.Lerp(currentLanePosition, targetXPosition, swipeLerpTime);
+        }
+        else
+        {
+            // Lock the X position during sliding
+            currentLanePosition = targetXPosition;
+        }
 
-        // Compute velocity
-        Vector3 velocity = new Vector3(
-            (currentLanePosition - rb.position.x) / Time.fixedDeltaTime, // Lateral movement
-            rb.velocity.y,                                              // Keep Y velocity (gravity)
-            forwardMovement.z                                           // Forward movement
+        // Set the rigidbody velocity (forward + lateral locking)
+        rb.velocity = new Vector3(
+            (currentLanePosition - rb.position.x) / Time.fixedDeltaTime, // Smooth X movement
+            rb.velocity.y,                                               // Gravity handling
+            speed                                                        // Steady forward motion
         );
 
-        // Apply velocity
-        rb.velocity = velocity;
+        // Keep the player always forward-facing
+        transform.rotation = Quaternion.LookRotation(Vector3.forward);
 
-        Debug.Log($"Position: {rb.position}, Velocity: {rb.velocity}");
+        Debug.Log($"Lane: {targetLane}, CurrentLanePosition: {currentLanePosition}, Speed: {speed}");
     }
 
     private void ChangeLane(int direction)
     {
-        // Update the target lane (-1, 0, 1 for left, center, right)
+        // Do not allow lane changes during a slide
+        if (isSliding) return;
+
+        // Update the target lane within the valid range (-1, 0, 1)
         targetLane += direction;
         targetLane = Mathf.Clamp(targetLane, -1, 1);
 
-        // Reset lerp progress for smooth lane switch
+        // Reset the lerp progress for smooth transition
         swipeLerpTime = 0;
+
+        Debug.Log($"Changed to Target Lane: {targetLane}");
     }
 
   

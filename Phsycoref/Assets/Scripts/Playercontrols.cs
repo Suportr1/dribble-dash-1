@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using UnityEngine;
 
 public class Playercontrols : MonoBehaviour
@@ -12,7 +13,7 @@ public class Playercontrols : MonoBehaviour
     public float slideDuration = 0.8f; // How long the slide lasts
     private int targetLane = 0; // Current target lane (-1, 0, 1 for left, center, right)
     public float jumpForce = 10f; // How high the player can jump
-   
+    private bool isGrounded = false; // Track if the player is currently on the ground
     public Rigidbody rb;
     public CapsuleCollider playerCollider; // CapsuleCollider attached to the player
     public Animator animator; // Animator for playing animations (attach your Animator component here)
@@ -45,7 +46,6 @@ public class Playercontrols : MonoBehaviour
             return;
         }
 
-        // Align CapsuleCollider for proper grounding
         float bottomColliderOffset = playerCollider.height / 2f - playerCollider.radius;
         playerCollider.center = new Vector3(playerCollider.center.x, bottomColliderOffset, playerCollider.center.z);
 
@@ -94,14 +94,25 @@ public class Playercontrols : MonoBehaviour
 
         Debug.Log("Initialization complete. Rigidbody, CapsuleCollider, and Animator have been set up.");
     }
+    void OnCollisionStay(Collision collision)
+    {
+        // Check if the collision is with the Ground layer
+        if (collision.gameObject.layer == LayerMask.NameToLayer("Ground"))
+        {
+            isGrounded = true; // Player is on the ground
+        }
+    }
+    void OnCollisionExit(Collision collision)
+    {
+        // Check if we just left the Ground layer
+        if (collision.gameObject.layer == LayerMask.NameToLayer("Ground"))
+        {
+            isGrounded = false; // Player is no longer on the ground
+        }
+    }
     private bool IsGrounded()
     {
-        // Create a raycast slightly below the player to check for the ground
-        float groundCheckDistance = 0.1f; // Small allowance for checking
-        Ray ray = new Ray(transform.position, Vector3.down);
-
-        // Check if we hit a collider below the player
-        return Physics.Raycast(ray, groundCheckDistance + playerCollider.radius);
+        return isGrounded; // Simplified grounded check
     }
 
     void Update()
@@ -208,10 +219,7 @@ public class Playercontrols : MonoBehaviour
     private void FixedUpdate()
     {
         // Check if the player is on the ground
-        if (!IsGrounded())
-        {
-            Debug.LogWarning("The player is not grounded!");
-        }
+       
 
         // Compute the player's target X position based on the target lane
         float targetXPosition = targetLane * laneDistance;
